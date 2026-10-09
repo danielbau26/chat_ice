@@ -1,0 +1,2 @@
+rootProject.name = 'taller_chat_ice'
+include 'client', 'server'
