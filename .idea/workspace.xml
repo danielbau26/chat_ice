@@ -5,17 +5,7 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="b67b4148-6469-4cf7-a3a4-6022653d5e77" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/taller_chat_ice/.idea/.gitignore" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/taller_chat_ice/client/src/main/java/Client.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/taller_chat_ice/client/src/main/java/controllers/UDPController.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/taller_chat_ice/server/src/main/java/Server.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/taller_chat_ice/server/src/main/java/controllers/IceController.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/taller_chat_ice/server/src/main/java/daos/Dao.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/taller_chat_ice/server/src/main/java/daos/RoomDao.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/taller_chat_ice/server/src/main/java/daos/UserDao.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/taller_chat_ice/server/src/main/java/model/Room.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/taller_chat_ice/server/src/main/java/model/User.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/taller_chat_ice/server/src/main/java/services/ChatServices.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/taller_chat_ice/.idea/gradle.xml" beforeDir="false" afterPath="$PROJECT_DIR$/taller_chat_ice/.idea/gradle.xml" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -28,9 +18,9 @@
   <component name="ProjectCodeStyleSettingsMigration">
     <option name="version" value="2" />
   </component>
-  <component name="ProjectColorInfo"><![CDATA[{
-  "associatedIndex": 4
-}]]></component>
+  <component name="ProjectColorInfo">{
+  &quot;associatedIndex&quot;: 4
+}</component>
   <component name="ProjectId" id="3KSgRT2XEPWaD0NDx9hsfLroQbB" />
   <component name="ProjectViewState">
     <option name="hideEmptyMiddlePackages" value="true" />
@@ -41,12 +31,25 @@
     "ModuleVcsDetector.initialDetectionPerformed": "true",
     "RunOnceActivity.ShowReadmeOnStart": "true",
     "RunOnceActivity.git.unshallow": "true",
-    "git-widget-placeholder": "feature/project__structure",
+    "git-widget-placeholder": "develop",
     "kotlin-language-version-configured": "true",
     "last_opened_file_path": "C:/Users/Usuario/Desktop/CompuNet/Unidad2/chat_ice",
     "settings.editor.selected.configurable": "preferences.pluginManager"
   }
 }]]></component>
+  <component name="RunManager">
+    <configuration default="true" type="JetRunConfigurationType">
+      <module name="chat_ice" />
+      <method v="2">
+        <option name="Make" enabled="true" />
+      </method>
+    </configuration>
+    <configuration default="true" type="KotlinStandaloneScriptRunConfigurationType">
+      <module name="chat_ice" />
+      <option name="filePath" />
+      <method v="2" />
+    </configuration>
+  </component>
   <component name="TaskManager">
     <task active="true" id="Default" summary="Default task">
       <changelist id="b67b4148-6469-4cf7-a3a4-6022653d5e77" name="Changes" comment="" />
