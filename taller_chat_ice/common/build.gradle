@@ -1,0 +1,12 @@
+plugins {
+    id 'java-library'
+    id 'com.zeroc.gradle.ice-builder.slice' version '1.5.0'
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    api 'com.zeroc:ice:3.7.10'
+}
