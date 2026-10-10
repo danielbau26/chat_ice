@@ -26,3 +26,15 @@ subprojects {
         mavenCentral()
     }
 }
+
+project(':client') {
+    dependencies {
+        implementation project(':common')
+    }
+}
+
+project(':server') {
+    dependencies {
+        implementation project(':common')
+    }
+}
