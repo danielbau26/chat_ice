@@ -3,19 +3,34 @@ package controllers;
 import com.zeroc.Ice.Current;
 
 import Chat.ClientCallback;
+import Chat.FileChunk;
+import files.FileReceiver;
 import ui.Console;
 
 /**
+ * Implementación (servant) de la interfaz ClientCallback definida en Chat.ice.
  *
- * El servidor tiene un control remoto (ClientCallbackPrx) que apunta a este objeto.
- * Cuando el servidor llama, por ejemplo, privateMessage(...) sobre ese control remoto,
- * el método se ejecuta AQUÍ, en el computador del cliente.
+ * Este objeto vive en el cliente, pero quien invoca sus métodos es el servidor.
+ * En el login, el cliente le entrega al servidor un proxy (ClientCallbackPrx) que apunta
+ * a este objeto; el servidor lo guarda en el User y lo usa cada vez que necesita
+ * notificar algo:
  *
- * Estos métodos los ejecutan hilos de Ice, no el hilo principal,
- * por eso se imprime con Console (que está sincronizada).
+ *  - ChatServices.sendPrivateMessage  -> privateMessage(...)
+ *  - ChatServices.sendRoomMessage     -> roomMessage(...)
+ *  - ChatServices.notifyPresence      -> presenceChanged(...)
+ *  - ChatServices.sendFileChunkTo...  -> fileChunk(...)
+ *  - PresenceMonitor                  -> ping()
+ *
+ * Estos métodos los ejecutan los hilos de Ice (no el hilo principal que lee comandos),
+ * por eso se imprime con Console, que está sincronizada.
  */
 public class ClientCallbackI implements ClientCallback {
 
+    private final FileReceiver fileReceiver;
+
+    public ClientCallbackI(FileReceiver fileReceiver) {
+        this.fileReceiver = fileReceiver;
+    }
     /**
      * El servidor avisa que alguien te mandó un mensaje privado
      */
@@ -39,6 +54,15 @@ public class ClientCallbackI implements ClientCallback {
     public void presenceChanged(String[] nicknames, Current current) {
         Console.show("Conectados (" + nicknames.length + "): " + String.join(", ", nicknames));
     }
+    /**
+     * El servidor reenvía un bloque de un archivo; roomName es "" si el envío es privado.
+     * FileReceiver junta los bloques y guarda el archivo cuando llegan todos.
+     */
+    @Override
+    public void fileChunk(String sender, String roomName, FileChunk chunk, Current current) {
+        fileReceiver.receive(sender, roomName, chunk);
+    }
+
 
     /**
      * El PresenceMonitor del servidor llama esto cada 5 segundos.
