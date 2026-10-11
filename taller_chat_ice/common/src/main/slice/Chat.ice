@@ -1,7 +1,19 @@
 module Chat
 {
     sequence<string> StringList;
+    // NUEVO: una lista de bytes. Así se representan los datos de un archivo en Slice.
+        // En Java se convierte en byte[]
+    sequence<byte> FileData;
 
+    // NUEVO: un bloque (pedazo) de archivo con su información
+    struct FileChunk {
+        string transferId;   // id único del envío, para saber a qué archivo pertenece el bloque
+        string fileName;     // nombre del archivo, ej: "foto.png"
+        long fileSize;       // tamaño total del archivo en bytes, para verificar al final
+        int index;           // número de este bloque (0, 1, 2...)
+        int totalChunks;     // cuántos bloques son en total
+        FileData data;       // los bytes de este pedazo
+    };
     //Excepciones basicas
     exception ChatError{
         string reason;
