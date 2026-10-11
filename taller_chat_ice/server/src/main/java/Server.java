@@ -29,6 +29,7 @@ public class Server {
             ObjectAdapter adapter = communicator.createObjectAdapterWithEndpoints("ChatAdapter", "tcp -h 0.0.0.0 -p 10000");
 
             //cuando llega una llamada para el objeto add añadirla al controllador de ice
+            // en este caso el controlador es el servant que ejecuta los metodos
             adapter.add(controller, Util.stringToIdentity("chat"));
 
             //atiende las solicitudes del cliente
