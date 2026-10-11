@@ -90,9 +90,32 @@ public class Client {
                     + " (" + e.getClass().getSimpleName() + ")");
         }
     }
+    // pide un nickname y llama login() en el servidor hasta que sea aceptado
+    // login puede lanzar dos excepciones definidas en chat..ice, nicknameInUse o chatErrror, cualquier otro error controlado
+    /**
+     * @param scanner - entrada de consola
+     * @param chat - proxy del servidor
+     * @param callback - proxy hacia el ClientCallbackI de este cliente
+     * @return - el nickname aceptado por el servidor, o null si se cerró la entrada
+     */
     private static String login(Scanner scanner, ChatServerPrx chat, ClientCallbackPrx callback){
-        return "";
+        while(true){
+            System.out.println("Nickname: ");
+            if (!scanner.hasNext()){
+                return null;
+            }
+            String nickname= scanner.nextLine().trim();
+            try {
+                chat.login(nickname,callback);
+                return nickname;
+            }catch (NicknameInUse e){
+                System.out.println("el nickname: " + nickname + "esta en uso");
+            }catch (ChatError e){
+                System.out.println("Error: " + e.reason);
+            }
+        }
     }
+
     private static void commandLoop(Scanner scanner, ChatServerPrx chat, String nickname) {
 
     }
