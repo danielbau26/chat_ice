@@ -85,4 +85,39 @@ public class FileReceiver {
             Console.show("Error guardando " + chunk.fileName + ": " + e.getMessage());
         }
     }
-}
+    /**
+     * Estado de un archivo que se está reconstruyendo
+     */
+    private static class IncomingFile {
+
+        private final String fileName;
+        private final long fileSize;
+        private final byte[][] chunks;
+        private int received;
+
+        IncomingFile(String fileName, long fileSize, int totalChunks) {
+            this.fileName = fileName;
+            this.fileSize = fileSize;
+            this.chunks = new byte[totalChunks][];
+            this.received = 0;
+        }
+
+        /**
+         * Guarda un bloque en su posición
+         *
+         * @return - true si ya llegaron todos los bloques
+         */
+        synchronized boolean add(int index, byte[] data) {
+            if (index < 0 || index >= chunks.length) {
+                throw new IllegalArgumentException("bloque fuera de rango");
+            }
+
+            //Si un bloque llegara repetido, no se cuenta dos veces
+            if (chunks[index] == null) {
+                chunks[index] = data;
+                received++;
+            }
+
+            return received == chunks.length;
+        }
+
