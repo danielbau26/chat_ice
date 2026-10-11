@@ -1,8 +1,9 @@
 module Chat
 {
     sequence<string> StringList;
+
     // NUEVO: una lista de bytes. Así se representan los datos de un archivo en Slice.
-        // En Java se convierte en byte[]
+    // En Java se convierte en byte[]
     sequence<byte> FileData;
 
     // NUEVO: un bloque (pedazo) de archivo con su información
@@ -14,6 +15,7 @@ module Chat
         int totalChunks;     // cuántos bloques son en total
         FileData data;       // los bytes de este pedazo
     };
+
     //Excepciones basicas
     exception ChatError{
         string reason;
@@ -37,6 +39,14 @@ module Chat
             string sender,
             string roomName,
             string text
+        );
+
+        // NUEVO: el servidor le entrega un bloque de archivo al cliente.
+        // roomName va vacío ("") si el archivo es privado
+        void fileChunk(
+            string sender,
+            string roomName,
+            FileChunk chunk
         );
 
         //Permitir comprobar si el cliente esta en linea
@@ -83,6 +93,20 @@ module Chat
             string sender,
             string roomName,
             string text
+        ) throws ChatError;
+
+        // NUEVO: el cliente manda un bloque de archivo a un usuario
+        void sendFileChunkToUser(
+            string sender,
+            string recipient,
+            FileChunk chunk
+        ) throws ChatError;
+
+        // NUEVO: el cliente manda un bloque de archivo a una sala
+        void sendFileChunkToRoom(
+            string sender,
+            string roomName,
+            FileChunk chunk
         ) throws ChatError;
     };
 };
