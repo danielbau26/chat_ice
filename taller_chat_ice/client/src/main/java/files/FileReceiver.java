@@ -120,4 +120,66 @@ public class FileReceiver {
 
             return received == chunks.length;
         }
+        /**
+         * Escribe los bloques en orden en el disco y verifica el tamaño
+         * @param dir - carpeta destino
+         * @return - ruta del archivo guardado
+         */
+        synchronized Path save(Path dir) throws IOException {
+            Files.createDirectories(dir);
+
+            Path target = uniquePath(dir, safeName(fileName));
+            long written = 0;
+
+            try (OutputStream out = new BufferedOutputStream(Files.newOutputStream(target))) {
+                for (int i = 0; i < chunks.length; i++) {
+                    out.write(chunks[i]);
+                    written += chunks[i].length;
+                }
+            }
+
+            //Verificación de integridad: los bytes escritos deben coincidir con el tamaño original
+            if (written != fileSize) {
+                Files.deleteIfExists(target);
+                throw new IllegalStateException("tamaño incorrecto (esperado " + fileSize + ", recibido " + written + ")");
+            }
+
+            return target;
+        }
+
+        /**
+         * Reemplaza caracteres no válidos en nombres de archivo de Windows
+         * y evita rutas como "../../algo"
+         */
+        private static String safeName(String name) {
+            String clean = name.replaceAll("[\\\\/:*?\"<>|]", "_");
+            return clean.isEmpty() ? "archivo" : clean;
+        }
+
+        /**
+         * Si ya existe un archivo con ese nombre, agrega (1), (2)... para no sobrescribirlo
+         */
+        private static Path uniquePath(Path dir, String name) {
+            Path candidate = dir.resolve(name);
+
+            if (!Files.exists(candidate)) {
+                return candidate;
+            }
+
+            int dot = name.lastIndexOf('.');
+            String base = dot > 0 ? name.substring(0, dot) : name;
+            String ext = dot > 0 ? name.substring(dot) : "";
+
+            int counter = 1;
+
+            while (Files.exists(candidate)) {
+                candidate = dir.resolve(base + " (" + counter + ")" + ext);
+                counter++;
+            }
+
+            return candidate;
+        }
+    }
+}
+
 
