@@ -13,6 +13,8 @@ import Chat.ClientCallbackPrx;
 import Chat.NicknameInUse;
 import controllers.ClientCallbackI;
 import ui.Console;
+import files.FileReceiver;
+import files.FileSender;
 public class Client {
     /**
      * el cliente cumple dos papeles al tiempo:
@@ -61,10 +63,11 @@ public class Client {
 
             ObjectAdapter adapter= communicator.createObjectAdapter("");
 
+            FileReceiver receiver= new FileReceiver();
             //registrar el servant en el adapater, en este caso el ClientCallbackI es la implementacion real
             // adapter.add() lo registrara bajo una identidad
             // devuelve el proxy que apunta a el
-            ObjectPrx prx= adapter.add(new ClientCallbackI(), Util.stringToIdentity(UUID.randomUUID().toString()));
+            ObjectPrx prx= adapter.add(new ClientCallbackI(receiver), Util.stringToIdentity(UUID.randomUUID().toString()));
             // activar el adapter para que despache invocaciones
             adapter.activate();
             //asociar el adapter a la conexion con el servidor (bidireccional).
@@ -80,6 +83,7 @@ public class Client {
             if(nickname == null){
                 return;
             }
+            receiver.setOwner(nickname);
             System.out.println("Bienvenido, " + nickname + ". Escribe /help para ver los comandos.");
             Console.prompt();
 
@@ -212,7 +216,18 @@ public class Client {
                     case "/users":
                         Console.show("Conectados: " + String.join(", ", chat.getUsers()));
                         break;
-
+                    /*
+                     * Enviar archivo (RF-04). Destino "usuario" = privado, "#sala" = sala.
+                     * Se envía en un hilo aparte (FileSender.sendAsync) para que la consola
+                     * siga disponible durante la transferencia.
+                     */
+                    case "/sendfile":
+                        if (parts.length < 3) {
+                            Console.show("Uso: /sendfile <usuario|#sala> <ruta>");
+                            break;
+                        }
+                        FileSender.sendAsync(chat, nickname, parts[1], parts[2]);
+                        break;
                     case "/help":
                         showHelp();
                         break;
@@ -262,6 +277,8 @@ public class Client {
                 "  /create <sala>           crear sala",
                 "  /join <sala>             unirse a una sala",
                 "  /leave <sala>            salir de una sala",
+                "  /sendfile <usuario> <ruta>   enviar archivo en privado",
+                "  /sendfile #<sala> <ruta>     enviar archivo a una sala",
                 "  /rooms                   ver salas",
                 "  /users                   ver conectados",
                 "  /logout                  cerrar sesión y salir"
