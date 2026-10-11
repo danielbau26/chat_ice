@@ -115,8 +115,157 @@ public class Client {
             }
         }
     }
+    // lee comandos del usuaro y ejecuta la operacion remota correspondiente
+    // modelo de hilos: este metodo corre en el hilo principal y se bloque en scanner.nexline esperando q
+    // escriba el uuario. las notificaciones del servidor (mennsajes entrantes, presencia, ping) las ejecutan
+    // los hilos internos de ice al despachar ClientCallbackI. como son hilos distintos el usuario puede
+    // recibir mensajes mientras escribe, sin que la lectura bloquee la recepcion ni viceversa
+    // ambos imprimen console, cuyos metodos estan sincronizados para que la salida no se mezcle.
+    // las invocaciones al servidor son sincronicas: el metodo retorna cuando el servidor dejo de procesar
+    // por eso si no se lanza excepcion se puede cofirmar al usaurio que la operacion se completo+
 
+    /**
+     *
+     * @param scanner - entada de consola
+     * @param chat - proxy del servidor
+     * @param nickname - nickname con el que se inciio la sesion
+     */
     private static void commandLoop(Scanner scanner, ChatServerPrx chat, String nickname) {
 
+        while (scanner.hasNextLine()) {
+
+            String line = scanner.nextLine().trim();
+
+            if (line.isEmpty()) {
+                Console.prompt();
+                continue;
+            }
+
+            /*
+             * Se divide en máximo 3 partes: comando, destino y texto.
+             * El límite de 3 permite que el texto del mensaje conserve sus espacios:
+             * "/msg pedro hola que tal" -> ["/msg", "pedro", "hola que tal"]
+             */
+            String[] parts = line.split("\\s+", 3);
+            String command = parts[0].toLowerCase();
+
+            try {
+                switch (command) {
+
+                    //Mensaje privado 1 a 1 (RF-02)
+                    case "/msg":
+                        if (parts.length < 3) {
+                            Console.show("Uso: /msg <usuario> <texto>");
+                            break;
+                        }
+                        chat.sendPrivateMessage(nickname, parts[1], parts[2]);
+                        Console.show("[OK] Mensaje entregado a " + parts[1]);
+                        break;
+
+                    //Mensaje a una sala; el servidor lo reenvía a todos los miembros menos al emisor (RF-03)
+                    case "/room":
+                        if (parts.length < 3) {
+                            Console.show("Uso: /room <sala> <texto>");
+                            break;
+                        }
+                        chat.sendRoomMessage(nickname, parts[1], parts[2]);
+                        Console.show("[OK] Mensaje enviado a #" + parts[1]);
+                        break;
+
+                    //Crear sala; el servidor agrega automáticamente al creador como miembro
+                    case "/create":
+                        if (parts.length < 2) {
+                            Console.show("Uso: /create <sala>");
+                            break;
+                        }
+                        chat.createRoom(nickname, parts[1]);
+                        Console.show("[OK] Sala #" + parts[1] + " creada (ya estás dentro)");
+                        break;
+
+                    case "/join":
+                        if (parts.length < 2) {
+                            Console.show("Uso: /join <sala>");
+                            break;
+                        }
+                        chat.joinRoom(nickname, parts[1]);
+                        Console.show("[OK] Te uniste a #" + parts[1]);
+                        break;
+
+                    case "/leave":
+                        if (parts.length < 2) {
+                            Console.show("Uso: /leave <sala>");
+                            break;
+                        }
+                        chat.leaveRoom(nickname, parts[1]);
+                        Console.show("[OK] Saliste de #" + parts[1]);
+                        break;
+
+                    //Catálogo de salas disponibles
+                    case "/rooms":
+                        String[] rooms = chat.getRooms();
+                        Console.show(rooms.length == 0
+                                ? "No hay salas creadas"
+                                : "Salas: " + String.join(", ", rooms));
+                        break;
+
+                    //Consulta manual de conectados (la lista también llega sola por presenceChanged)
+                    case "/users":
+                        Console.show("Conectados: " + String.join(", ", chat.getUsers()));
+                        break;
+
+                    case "/help":
+                        showHelp();
+                        break;
+
+                    /*
+                     * Cierre de sesión ordenado (RF-01): el servidor elimina al usuario,
+                     * lo saca de sus salas y notifica la nueva lista de presencia.
+                     * Al retornar, se sale del try-with-resources del main y se cierra
+                     * el Communicator.
+                     */
+                    case "/logout":
+                        chat.logout(nickname);
+                        System.out.println("\rSesión cerrada. ¡Hasta luego!");
+                        return;
+
+                    default:
+                        Console.show("Comando desconocido. Escribe /help");
+                }
+
+            } catch (ChatError e) {
+                /*
+                 * Error controlado definido en Chat.ice. El servidor lo lanza cuando la
+                 * operación no se puede realizar (usuario no conectado, sala inexistente,
+                 * no pertenece a la sala, mensaje vacío...). reason trae el motivo.
+                 */
+                Console.show("Error: " + e.reason);
+
+            } catch (LocalException e) {
+                /*
+                 * Error de comunicación: el servidor se cayó o la conexión se perdió.
+                 * No tiene sentido seguir leyendo comandos.
+                 */
+                System.out.println("\rSe perdió la conexión con el servidor.");
+                return;
+            }
+        }
+    }
+
+    /**
+     * Muestra los comandos disponibles
+     */
+    private static void showHelp() {
+        Console.show(String.join("\n",
+                "Comandos:",
+                "  /msg <usuario> <texto>   mensaje privado",
+                "  /room <sala> <texto>     mensaje a una sala",
+                "  /create <sala>           crear sala",
+                "  /join <sala>             unirse a una sala",
+                "  /leave <sala>            salir de una sala",
+                "  /rooms                   ver salas",
+                "  /users                   ver conectados",
+                "  /logout                  cerrar sesión y salir"
+        ));
     }
 }
+
