@@ -21,12 +21,15 @@ public class IceController implements ChatServer {
     }
 
 
-    //No entedí que es current
+    // Current trae información de la llamada que llega, incluida la conexión (current.con)
     @Override
     public void login(String nickname, ClientCallbackPrx callback, Current current) throws NicknameInUse, ChatError {
 
         try {
-            chatServices.login(nickname, callback);
+            // Amarra el callback a la conexión por la que llegó el login,
+            // para que el servidor pueda llamar al cliente por esa misma conexión
+            ClientCallbackPrx fixedCallback = callback.ice_fixed(current.con);
+            chatServices.login(nickname, fixedCallback);
         } catch (IllegalStateException e) {
             NicknameInUse error = new NicknameInUse();
             error.nickname = nickname;
