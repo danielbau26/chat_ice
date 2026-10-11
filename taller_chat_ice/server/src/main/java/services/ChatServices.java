@@ -288,6 +288,49 @@ public class ChatServices {
             throw new IllegalStateException("No se pudo entregar el archivo a todos los integrantes");
         }
     }
+    /**
+     * Devuelve los usuarios conectados de una sala, excepto el emisor.
+     * Debe llamarse dentro de un bloque synchronized.
+     */
+    private List<User> collectRoomRecipients(Room room, String sender) throws Exception {
+        List<User> recipients = new ArrayList<>();
+        List<String> members = room.getMembers();
+
+        for (int i = 0; i < members.size(); i++) {
+            String nickname = members.get(i);
+
+            if (!nickname.equals(sender)) {
+                User user = userDao.findById(nickname);
+
+                if (user != null) {
+                    recipients.add(user);
+                }
+            }
+        }
+
+        return recipients;
+    }
+
+    /**
+     * Verifica que el bloque tenga datos y metadatos coherentes
+     */
+    private void validateChunk(FileChunk chunk) {
+        if (chunk == null || chunk.data == null) {
+            throw new IllegalArgumentException("El bloque del archivo está vacío");
+        }
+
+        if (chunk.fileName == null || chunk.fileName.trim().isEmpty()) {
+            throw new IllegalArgumentException("El archivo no tiene nombre");
+        }
+
+        if (chunk.transferId == null || chunk.transferId.trim().isEmpty()) {
+            throw new IllegalArgumentException("El bloque no tiene identificador de transferencia");
+        }
+
+        if (chunk.totalChunks <= 0 || chunk.index < 0 || chunk.index >= chunk.totalChunks) {
+            throw new IllegalArgumentException("Índice de bloque inválido");
+        }
+    }
 
     /**
      * Obtiene los nombres de los usuarios que se encuentran conectados y los envia a cada usuario conectado
