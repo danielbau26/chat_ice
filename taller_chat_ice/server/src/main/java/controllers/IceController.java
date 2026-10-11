@@ -11,6 +11,7 @@ import Chat.NicknameInUse;
 import model.Room;
 import model.User;
 import services.ChatServices;
+import Chat.FileChunk;
 
 public class IceController implements ChatServer {
 
@@ -130,6 +131,25 @@ public class IceController implements ChatServer {
             chatServices.sendRoomMessage(
                     sender, roomName, text
             );
+        } catch (Exception e) {
+            throw createError(e);
+        }
+    }
+    @Override
+    public void sendFileChunkToUser(String sender, String recipient, FileChunk chunk, Current current) throws ChatError {
+
+        try {
+            chatServices.sendFileChunkToUser(sender, recipient, chunk);
+        } catch (Exception e) {
+            throw createError(e);
+        }
+    }
+
+    @Override
+    public void sendFileChunkToRoom(String sender, String roomName, FileChunk chunk, Current current) throws ChatError {
+
+        try {
+            chatServices.sendFileChunkToRoom(sender, roomName, chunk);
         } catch (Exception e) {
             throw createError(e);
         }
