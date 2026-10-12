@@ -8,7 +8,7 @@ import daos.RoomDao;
 import daos.UserDao;
 import model.Room;
 import model.User;
-
+import Chat.FileChunk;
 import Chat.ClientCallbackPrx;
 
 public class ChatServices {
@@ -220,6 +220,115 @@ public class ChatServices {
 
         if (deliveryFailed) {
             throw new IllegalStateException("No se pudo entregar el mensaje a todos los integrantes");
+        }
+    }
+    /**
+     * Reenvía un bloque de archivo a un usuario en privado.
+     * El servidor no guarda el archivo: valida el bloque y se lo pasa al destinatario.
+     * Se envía roomName vacío ("") para que el receptor sepa que es privado.
+     */
+    public void sendFileChunkToUser(String sender, String recipient, FileChunk chunk) throws Exception {
+
+        User recipientUser;
+
+        synchronized (this) {
+            User senderUser = requireUser(sender);
+            recipientUser = requireUser(recipient);
+            validateChunk(chunk);
+
+            sender = senderUser.getNickname();
+        }
+
+        //Se llama al callback fuera del synchronized para no bloquear a los demás
+        //usuarios mientras el bloque viaja por la red
+        try {
+            recipientUser.getCallback().fileChunk(sender, "", chunk);
+        } catch (LocalException e) {
+            throw new IllegalStateException("No se pudo entregar el archivo al destinatario", e);
+        }
+    }
+
+    /**
+     * Reenvía un bloque de archivo a todos los miembros de una sala, menos al emisor.
+     * Solo un miembro de la sala puede enviarle archivos.
+     */
+    public void sendFileChunkToRoom(String sender, String roomName, FileChunk chunk) throws Exception {
+
+        List<User> recipients;
+
+        synchronized (this) {
+            User senderUser = requireUser(sender);
+            Room room = requireRoom(roomName);
+
+            sender = senderUser.getNickname();
+            roomName = room.getName();
+
+            if (!room.hasMember(sender)) {
+                throw new IllegalStateException("El usuario no pertenece a esta sala");
+            }
+
+            validateChunk(chunk);
+
+            recipients = collectRoomRecipients(room, sender);
+        }
+
+        boolean deliveryFailed = false;
+
+        for (int i = 0; i < recipients.size(); i++) {
+            User user = recipients.get(i);
+
+            try {
+                user.getCallback().fileChunk(sender, roomName, chunk);
+            } catch (LocalException e) {
+                deliveryFailed = true;
+            }
+        }
+
+        if (deliveryFailed) {
+            throw new IllegalStateException("No se pudo entregar el archivo a todos los integrantes");
+        }
+    }
+    /**
+     * Devuelve los usuarios conectados de una sala, excepto el emisor.
+     * Debe llamarse dentro de un bloque synchronized.
+     */
+    private List<User> collectRoomRecipients(Room room, String sender) throws Exception {
+        List<User> recipients = new ArrayList<>();
+        List<String> members = room.getMembers();
+
+        for (int i = 0; i < members.size(); i++) {
+            String nickname = members.get(i);
+
+            if (!nickname.equals(sender)) {
+                User user = userDao.findById(nickname);
+
+                if (user != null) {
+                    recipients.add(user);
+                }
+            }
+        }
+
+        return recipients;
+    }
+
+    /**
+     * Verifica que el bloque tenga datos y metadatos coherentes
+     */
+    private void validateChunk(FileChunk chunk) {
+        if (chunk == null || chunk.data == null) {
+            throw new IllegalArgumentException("El bloque del archivo está vacío");
+        }
+
+        if (chunk.fileName == null || chunk.fileName.trim().isEmpty()) {
+            throw new IllegalArgumentException("El archivo no tiene nombre");
+        }
+
+        if (chunk.transferId == null || chunk.transferId.trim().isEmpty()) {
+            throw new IllegalArgumentException("El bloque no tiene identificador de transferencia");
+        }
+
+        if (chunk.totalChunks <= 0 || chunk.index < 0 || chunk.index >= chunk.totalChunks) {
+            throw new IllegalArgumentException("Índice de bloque inválido");
         }
     }
 

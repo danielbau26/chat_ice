@@ -5,13 +5,19 @@ import com.zeroc.Ice.Util;
 import controllers.IceController;
 import services.ChatServices;
 import services.PresenceMonitor;
+import com.zeroc.Ice.InitializationData;
 
 public class Server {
 
     public static void main(String[] args) {
-
+        //configura más hilos para que el servidor no se bloquee
+        //cuando atiende una llamada y al mismo tiempo llama a los clientes (callbacks)
+        InitializationData initData = new InitializationData();
+        initData.properties = Util.createProperties(args);
+        initData.properties.setProperty("Ice.ThreadPool.Server.Size", "4");
+        initData.properties.setProperty("Ice.ThreadPool.Server.SizeMax", "16");
         //inicializa ice
-        try (Communicator communicator = Util.initialize(args)) {
+        try (Communicator communicator = Util.initialize(args, initData)) {
 
             //crea el servicio
             ChatServices chatServices = new ChatServices();
@@ -23,6 +29,7 @@ public class Server {
             ObjectAdapter adapter = communicator.createObjectAdapterWithEndpoints("ChatAdapter", "tcp -h 0.0.0.0 -p 10000");
 
             //cuando llega una llamada para el objeto add añadirla al controllador de ice
+            // en este caso el controlador es el servant que ejecuta los metodos
             adapter.add(controller, Util.stringToIdentity("chat"));
 
             //atiende las solicitudes del cliente

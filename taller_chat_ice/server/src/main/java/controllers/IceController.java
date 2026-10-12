@@ -11,6 +11,7 @@ import Chat.NicknameInUse;
 import model.Room;
 import model.User;
 import services.ChatServices;
+import Chat.FileChunk;
 
 public class IceController implements ChatServer {
 
@@ -21,12 +22,15 @@ public class IceController implements ChatServer {
     }
 
 
-    //No entedí que es current
+    // Current trae información de la llamada que llega, incluida la conexión (current.con)
     @Override
     public void login(String nickname, ClientCallbackPrx callback, Current current) throws NicknameInUse, ChatError {
 
         try {
-            chatServices.login(nickname, callback);
+            // Amarra el callback a la conexión por la que llegó el login,
+            // para que el servidor pueda llamar al cliente por esa misma conexión
+            ClientCallbackPrx fixedCallback = callback.ice_fixed(current.con);
+            chatServices.login(nickname, fixedCallback);
         } catch (IllegalStateException e) {
             NicknameInUse error = new NicknameInUse();
             error.nickname = nickname;
@@ -127,6 +131,25 @@ public class IceController implements ChatServer {
             chatServices.sendRoomMessage(
                     sender, roomName, text
             );
+        } catch (Exception e) {
+            throw createError(e);
+        }
+    }
+    @Override
+    public void sendFileChunkToUser(String sender, String recipient, FileChunk chunk, Current current) throws ChatError {
+
+        try {
+            chatServices.sendFileChunkToUser(sender, recipient, chunk);
+        } catch (Exception e) {
+            throw createError(e);
+        }
+    }
+
+    @Override
+    public void sendFileChunkToRoom(String sender, String roomName, FileChunk chunk, Current current) throws ChatError {
+
+        try {
+            chatServices.sendFileChunkToRoom(sender, roomName, chunk);
         } catch (Exception e) {
             throw createError(e);
         }
