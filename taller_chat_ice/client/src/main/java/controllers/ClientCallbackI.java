@@ -2,6 +2,7 @@ package controllers;
 
 import com.zeroc.Ice.Current;
 
+import Chat.AudioEndpoint;
 import Chat.ClientCallback;
 import Chat.FileChunk;
 import files.FileReceiver;
@@ -63,6 +64,58 @@ public class ClientCallbackI implements ClientCallback {
         fileReceiver.receive(sender, roomName, chunk);
     }
 
+
+    // ===================== LLAMADAS DE VOZ (RF-05 / RF-06) =====================
+    // Por ahora solo muestran el aviso. El manejo del audio UDP se conecta en los
+    // siguientes pasos (UDPController).
+
+    /**
+     * Alguien te está llamando
+     */
+    @Override
+    public void incomingCall(String caller, Current current) {
+        Console.show("[Llamada] " + caller + " te está llamando. Usa /accept " + caller + " o /reject " + caller);
+    }
+
+    /**
+     * La persona a la que llamaste aceptó; peer trae su IP y puerto UDP
+     */
+    @Override
+    public void callAccepted(AudioEndpoint peer, Current current) {
+        Console.show("[Llamada] " + peer.nickname + " aceptó la llamada");
+    }
+
+    /**
+     * La persona a la que llamaste rechazó
+     */
+    @Override
+    public void callRejected(String callee, Current current) {
+        Console.show("[Llamada] " + callee + " rechazó la llamada");
+    }
+
+    /**
+     * La otra persona colgó, canceló o se desconectó
+     */
+    @Override
+    public void callEnded(String peer, Current current) {
+        Console.show("[Llamada] La llamada con " + peer + " terminó");
+    }
+
+    /**
+     * Alguien entró a la llamada grupal de una sala
+     */
+    @Override
+    public void groupMemberJoined(String roomName, AudioEndpoint member, Current current) {
+        Console.show("[Llamada #" + roomName + "] " + member.nickname + " entró a la llamada");
+    }
+
+    /**
+     * Alguien salió de la llamada grupal de una sala
+     */
+    @Override
+    public void groupMemberLeft(String roomName, String nickname, Current current) {
+        Console.show("[Llamada #" + roomName + "] " + nickname + " salió de la llamada");
+    }
 
     /**
      * El PresenceMonitor del servidor llama esto cada 5 segundos.

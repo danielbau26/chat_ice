@@ -12,6 +12,7 @@ import model.Room;
 import model.User;
 import services.ChatServices;
 import Chat.FileChunk;
+import Chat.AudioEndpoint;
 
 public class IceController implements ChatServer {
 
@@ -157,6 +158,49 @@ public class IceController implements ChatServer {
         } catch (Exception e) {
             throw createError(e);
         }
+    }
+
+    // ===================== LLAMADAS DE VOZ (RF-05 / RF-06) =====================
+    // Por ahora solo cumplen el contrato para que el proyecto compile.
+    // La lógica se implementa en CallServices (siguiente paso).
+
+    @Override
+    public void startCall(String caller, String callee, int udpPort, Current current) throws ChatError {
+        throw notImplemented();
+    }
+
+    @Override
+    public AudioEndpoint acceptCall(String callee, String caller, int udpPort, Current current) throws ChatError {
+        throw notImplemented();
+    }
+
+    @Override
+    public void rejectCall(String callee, String caller, Current current) throws ChatError {
+        throw notImplemented();
+    }
+
+    @Override
+    public void hangup(String nickname, Current current) throws ChatError {
+        throw notImplemented();
+    }
+
+    @Override
+    public AudioEndpoint[] joinGroupCall(String nickname, String roomName, int udpPort, Current current) throws ChatError {
+        throw notImplemented();
+    }
+
+    @Override
+    public void leaveGroupCall(String nickname, String roomName, Current current) throws ChatError {
+        throw notImplemented();
+    }
+
+    /**
+     * Error temporal mientras las llamadas no estén implementadas
+     */
+    private ChatError notImplemented() {
+        ChatError error = new ChatError();
+        error.reason = "Las llamadas de voz aún no están implementadas";
+        return error;
     }
 
     private ChatError createError(Exception e) {
