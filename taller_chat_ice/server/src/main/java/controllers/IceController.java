@@ -62,7 +62,11 @@ public class IceController implements ChatServer {
 
             return nicknames;
         } catch (Exception e) {
-            throw new RuntimeException("No se pudo consultar los usuarios", e);
+            //getUsers no declara excepciones en Chat.ice: si se lanzara una RuntimeException
+            //al cliente le llegaría un UnknownException sin mensaje. Se registra y se
+            //devuelve una lista vacía.
+            System.err.println("No se pudo consultar los usuarios: " + e.getMessage());
+            return new String[0];
         }
     }
 
@@ -98,9 +102,9 @@ public class IceController implements ChatServer {
 
             return names;
         } catch (Exception e) {
-            throw new RuntimeException(
-                    "No se pudo consultar las salas", e
-            );
+            //Igual que getUsers: se registra y se devuelve una lista vacía
+            System.err.println("No se pudo consultar las salas: " + e.getMessage());
+            return new String[0];
         }
     }
 

@@ -50,8 +50,7 @@ public class Client {
             // al invocar un metodo sobre el proxy, se serializan los parametros, los envia por red,
             // el servidor ejecuta el metodo real y devuelve el resultado+
 
-            ChatServerPrx chat= ChatServerPrx.checkedCast(communicator.stringToProxy(SERVER_IDENTITY + ":tcp-h"
-            + host +" -p" + port));
+            ChatServerPrx chat= ChatServerPrx.checkedCast(communicator.stringToProxy(SERVER_IDENTITY + ":tcp -h " + host + " -p " + port));
 
             if(chat==null){
                 System.out.println("El objeto '" + SERVER_IDENTITY + "' del servidor no implementa ChatServer");
@@ -84,8 +83,9 @@ public class Client {
                 return;
             }
             receiver.setOwner(nickname);
-            System.out.println("Bienvenido, " + nickname + ". Escribe /help para ver los comandos.");
-            Console.prompt();
+            //Console.show en vez de System.out: justo después del login el servidor manda
+            //presenceChanged desde otro hilo y así las líneas no se mezclan
+            Console.show("Bienvenido, " + nickname + ". Escribe /help para ver los comandos.");
 
             // ciclo de comandos
             commandLoop(scanner, chat,nickname);
@@ -113,7 +113,7 @@ public class Client {
                 chat.login(nickname,callback);
                 return nickname;
             }catch (NicknameInUse e){
-                System.out.println("el nickname: " + nickname + "esta en uso");
+                System.out.println("el nickname: " + nickname + " está en uso");
             }catch (ChatError e){
                 System.out.println("Error: " + e.reason);
             }
@@ -240,7 +240,7 @@ public class Client {
                      */
                     case "/logout":
                         chat.logout(nickname);
-                        System.out.println("\rSesión cerrada. ¡Hasta luego!");
+                        Console.showFinal("Sesión cerrada. ¡Hasta luego!");
                         return;
 
                     default:
@@ -260,7 +260,7 @@ public class Client {
                  * Error de comunicación: el servidor se cayó o la conexión se perdió.
                  * No tiene sentido seguir leyendo comandos.
                  */
-                System.out.println("\rSe perdió la conexión con el servidor.");
+                Console.showFinal("Se perdió la conexión con el servidor.");
                 return;
             }
         }

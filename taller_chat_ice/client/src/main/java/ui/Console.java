@@ -25,6 +25,16 @@ public class Console {
     }
 
     /**
+     * Muestra un último mensaje sin volver a poner el prompt.
+     * Se usa al cerrar el cliente (logout o conexión perdida), cuando ya no se leerán más comandos.
+     * @param message - texto a mostrar
+     */
+    public static synchronized void showFinal(String message) {
+        System.out.print("\r" + message + "\n");
+        System.out.flush();
+    }
+
+    /**
      * Solo muestra el prompt "> "
      */
     public static synchronized void prompt() {
