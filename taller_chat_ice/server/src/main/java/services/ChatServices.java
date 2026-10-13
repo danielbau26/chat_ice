@@ -2,13 +2,16 @@ package services;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 
 import com.zeroc.Ice.LocalException;
 import daos.RoomDao;
 import daos.UserDao;
 import model.Room;
 import model.User;
-
+import Chat.FileChunk;
 import Chat.ClientCallbackPrx;
 
 public class ChatServices {
@@ -16,9 +19,34 @@ public class ChatServices {
     private final UserDao userDao;
     private final RoomDao roomDao;
 
+    /**
+     * Servicio de llamadas. Se usa para colgar las llamadas de un usuario cuando hace
+     * logout, se desconecta o sale de una sala. Se asigna con setCallServices porque
+     * CallServices también necesita a ChatServices (dependencia en ambos sentidos).
+     * volatile: lo asigna el hilo principal y lo leen los hilos de Ice.
+     */
+    private volatile CallServices callServices;
+
     public ChatServices() {
         this.userDao = new UserDao();
         this.roomDao = new RoomDao();
+    }
+
+    public void setCallServices(CallServices callServices) {
+        this.callServices = callServices;
+    }
+
+    /**
+     * Termina las llamadas de un usuario que ya no está disponible.
+     * Se llama SIEMPRE fuera del synchronized(this): CallServices consulta a ChatServices,
+     * así ningún hilo tiene los dos candados al tiempo (evita deadlocks).
+     */
+    private void endCallsOf(String nickname) {
+        CallServices calls = callServices;
+
+        if (calls != null) {
+            calls.onUserDisconnected(nickname);
+        }
     }
 
     public User login(String nickname, ClientCallbackPrx callback) throws Exception {
@@ -50,6 +78,9 @@ public class ChatServices {
             userDao.delete(nickname);
         }
 
+        //Cuelga sus llamadas (fuera del candado)
+        endCallsOf(nickname);
+
         notifyPresence();
     }
 
@@ -79,16 +110,26 @@ public class ChatServices {
         room.addMember(nickname);
     }
 
-    public synchronized void leaveRoom(String nickname, String roomName) throws Exception {
-        requireUser(nickname);
+    public void leaveRoom(String nickname, String roomName) throws Exception {
+        synchronized (this) {
+            requireUser(nickname);
 
-        Room room = requireRoom(roomName);
+            Room room = requireRoom(roomName);
 
-        if (!room.hasMember(nickname)) {
-            throw new IllegalStateException("El usuario no pertenece a esta sala");
+            if (!room.hasMember(nickname)) {
+                throw new IllegalStateException("El usuario no pertenece a esta sala");
+            }
+
+            room.removeMember(nickname);
+            roomName = room.getName();
         }
 
-        room.removeMember(nickname);
+        //Si estaba en la llamada grupal de la sala, sale de ella (fuera del candado)
+        CallServices calls = callServices;
+
+        if (calls != null) {
+            calls.onUserLeftRoom(nickname, roomName);
+        }
     }
 
     /**
@@ -205,21 +246,130 @@ public class ChatServices {
             }
         }
 
-        //registra si hay algun error al enviar algun mensaje
-        boolean deliveryFailed = false;
+        //Envío asíncrono: se despacha el mensaje a todos los miembros al mismo tiempo
+        //(roomMessageAsync no espera la respuesta) y luego se espera a que terminen.
+        //Así un cliente lento no retrasa la entrega a los demás.
+        List<CompletableFuture<Void>> deliveries = new ArrayList<>();
 
         for (int i = 0; i < recipients.size(); i++) {
             User user = recipients.get(i);
-
-            try {
-                user.getCallback().roomMessage(sender, roomName, message);
-            } catch (LocalException e) {
-                deliveryFailed = true;
-            }
+            deliveries.add(user.getCallback().roomMessageAsync(sender, roomName, message));
         }
+
+        //registra si hay algun error al enviar algun mensaje
+        boolean deliveryFailed = !waitAll(deliveries);
 
         if (deliveryFailed) {
             throw new IllegalStateException("No se pudo entregar el mensaje a todos los integrantes");
+        }
+    }
+    /**
+     * Reenvía un bloque de archivo a un usuario en privado.
+     * El servidor no guarda el archivo: valida el bloque y se lo pasa al destinatario.
+     * Se envía roomName vacío ("") para que el receptor sepa que es privado.
+     */
+    public void sendFileChunkToUser(String sender, String recipient, FileChunk chunk) throws Exception {
+
+        User recipientUser;
+
+        synchronized (this) {
+            User senderUser = requireUser(sender);
+            recipientUser = requireUser(recipient);
+            validateChunk(chunk);
+
+            sender = senderUser.getNickname();
+        }
+
+        //Se llama al callback fuera del synchronized para no bloquear a los demás
+        //usuarios mientras el bloque viaja por la red
+        try {
+            recipientUser.getCallback().fileChunk(sender, "", chunk);
+        } catch (LocalException e) {
+            throw new IllegalStateException("No se pudo entregar el archivo al destinatario", e);
+        }
+    }
+
+    /**
+     * Reenvía un bloque de archivo a todos los miembros de una sala, menos al emisor.
+     * Solo un miembro de la sala puede enviarle archivos.
+     */
+    public void sendFileChunkToRoom(String sender, String roomName, FileChunk chunk) throws Exception {
+
+        List<User> recipients;
+
+        synchronized (this) {
+            User senderUser = requireUser(sender);
+            Room room = requireRoom(roomName);
+
+            sender = senderUser.getNickname();
+            roomName = room.getName();
+
+            if (!room.hasMember(sender)) {
+                throw new IllegalStateException("El usuario no pertenece a esta sala");
+            }
+
+            validateChunk(chunk);
+
+            recipients = collectRoomRecipients(room, sender);
+        }
+
+        //Igual que en sendRoomMessage: el bloque se envía a todos en paralelo.
+        //Se espera a que todos lo reciban antes de retornar, así el emisor no manda
+        //el siguiente bloque hasta que este llegó (se conserva el orden).
+        List<CompletableFuture<Void>> deliveries = new ArrayList<>();
+
+        for (int i = 0; i < recipients.size(); i++) {
+            User user = recipients.get(i);
+            deliveries.add(user.getCallback().fileChunkAsync(sender, roomName, chunk));
+        }
+
+        boolean deliveryFailed = !waitAll(deliveries);
+
+        if (deliveryFailed) {
+            throw new IllegalStateException("No se pudo entregar el archivo a todos los integrantes");
+        }
+    }
+    /**
+     * Devuelve los usuarios conectados de una sala, excepto el emisor.
+     * Debe llamarse dentro de un bloque synchronized.
+     */
+    private List<User> collectRoomRecipients(Room room, String sender) throws Exception {
+        List<User> recipients = new ArrayList<>();
+        List<String> members = room.getMembers();
+
+        for (int i = 0; i < members.size(); i++) {
+            String nickname = members.get(i);
+
+            if (!nickname.equals(sender)) {
+                User user = userDao.findById(nickname);
+
+                if (user != null) {
+                    recipients.add(user);
+                }
+            }
+        }
+
+        return recipients;
+    }
+
+    /**
+     * Verifica que el bloque tenga datos y metadatos coherentes
+     */
+    private void validateChunk(FileChunk chunk) {
+        if (chunk == null || chunk.data == null) {
+            throw new IllegalArgumentException("El bloque del archivo está vacío");
+        }
+
+        if (chunk.fileName == null || chunk.fileName.trim().isEmpty()) {
+            throw new IllegalArgumentException("El archivo no tiene nombre");
+        }
+
+        if (chunk.transferId == null || chunk.transferId.trim().isEmpty()) {
+            throw new IllegalArgumentException("El bloque no tiene identificador de transferencia");
+        }
+
+        if (chunk.totalChunks <= 0 || chunk.index < 0 || chunk.index >= chunk.totalChunks) {
+            throw new IllegalArgumentException("Índice de bloque inválido");
         }
     }
 
@@ -240,15 +390,38 @@ public class ChatServices {
             }
         }
 
+        //Notificación asíncrona a todos los conectados. No se espera la respuesta:
+        //si un cliente no recibe la lista solo se registra el error (el PresenceMonitor
+        //se encargará de sacarlo si se desconectó).
         for (int i = 0; i < users.size(); i++) {
             User user = users.get(i);
 
+            user.getCallback().presenceChangedAsync(nicknames).whenComplete((result, error) -> {
+                if (error != null) {
+                    System.err.println("No se pudo notificar a " + user.getNickname());
+                }
+            });
+        }
+    }
+
+    /**
+     * Espera a que terminen todos los envíos asíncronos
+     * @param deliveries - envíos en curso (uno por destinatario)
+     * @return - true si todos se entregaron, false si alguno falló
+     */
+    private boolean waitAll(List<CompletableFuture<Void>> deliveries) {
+        boolean allDelivered = true;
+
+        for (int i = 0; i < deliveries.size(); i++) {
             try {
-                user.getCallback().presenceChanged(nicknames);
-            } catch (com.zeroc.Ice.LocalException e) {
-                System.err.println("No se pudo notificar a " + user.getNickname());
+                //join espera a que termine ese envío; si falló lanza CompletionException
+                deliveries.get(i).join();
+            } catch (CompletionException | CancellationException e) {
+                allDelivered = false;
             }
         }
+
+        return allDelivered;
     }
 
     public void removeDisconnectedUser(User disconnectedUser) throws Exception {
@@ -269,6 +442,9 @@ public class ChatServices {
 
             userDao.delete(nickname);
         }
+
+        //Cuelga sus llamadas (fuera del candado)
+        endCallsOf(disconnectedUser.getNickname());
 
         notifyPresence();
     }

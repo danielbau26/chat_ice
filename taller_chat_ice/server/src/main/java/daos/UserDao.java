@@ -20,9 +20,8 @@ public class UserDao implements Dao<User, String> {
             throw new IllegalArgumentException("El usuario no puede ser null");
         }
 
-        String nickname = user.getNickname();
-
-        if (users.containsKey(nickname)) {
+        // Guarda solo si el nickname no existe, en un solo paso (thread-safe)
+        if (users.putIfAbsent(user.getNickname(), user) != null) {
             throw new IllegalStateException("El nickname ya está en uso");
         }
 
