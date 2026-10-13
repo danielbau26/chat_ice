@@ -9,3 +9,13 @@ application {
 run {
     standardInput = System.in
 }
+
+// Prueba del audio UDP sin servidor (se envía audio a sí mismo):
+//   .\gradlew :client:audioTest --console=plain
+tasks.register('audioTest', JavaExec) {
+    group = 'application'
+    description = 'Prueba de micrófono/parlantes por UDP en localhost'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'audio.AudioTest'
+    standardInput = System.in
+}

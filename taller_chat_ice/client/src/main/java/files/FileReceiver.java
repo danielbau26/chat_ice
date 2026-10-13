@@ -30,6 +30,12 @@ public class FileReceiver {
     private static final String BASE_DIR = "archivos_recibidos";
 
     /**
+     * Si una transferencia pasa este tiempo sin recibir bloques (por ejemplo, el emisor
+     * se desconectó a la mitad), se descarta para no ocupar memoria para siempre
+     */
+    private static final long TRANSFER_TIMEOUT_MS = 60_000;
+
+    /**
      * Transferencias en curso: transferId -> archivo en reconstrucción
      */
     private final Map<String, IncomingFile> transfers = new ConcurrentHashMap<>();
@@ -51,6 +57,17 @@ public class FileReceiver {
      * @param chunk    - bloque con datos y metadatos
      */
     public void receive(String sender, String roomName, FileChunk chunk) {
+
+        //Antes de procesar, se descartan las transferencias abandonadas
+        discardStaleTransfers();
+
+        //Valida los metadatos antes de reservar memoria para el archivo
+        String invalid = validate(chunk);
+
+        if (invalid != null) {
+            Console.show("Error: bloque inválido de " + chunk.fileName + " (" + invalid + ")");
+            return;
+        }
 
         String origin = roomName.isEmpty() ? "[Privado] " + sender : "[#" + roomName + "] " + sender;
 
@@ -86,6 +103,53 @@ public class FileReceiver {
         }
     }
     /**
+     * Comprueba que los metadatos del bloque sean coherentes.
+     * Evita, por ejemplo, que un totalChunks enorme cree un arreglo gigante en memoria.
+     * @param chunk - bloque recibido
+     * @return - null si es válido, o el motivo por el que no lo es
+     */
+    private String validate(FileChunk chunk) {
+        if (chunk.transferId == null || chunk.transferId.isEmpty()) {
+            return "sin identificador de transferencia";
+        }
+
+        if (chunk.data == null || chunk.data.length > FileSender.CHUNK_SIZE) {
+            return "tamaño de bloque inválido";
+        }
+
+        if (chunk.fileSize < 0) {
+            return "tamaño de archivo negativo";
+        }
+
+        //Debe coincidir con la cuenta que hace FileSender (división redondeando hacia arriba)
+        long expectedChunks = Math.max(1, (chunk.fileSize + FileSender.CHUNK_SIZE - 1) / FileSender.CHUNK_SIZE);
+
+        if (chunk.totalChunks != expectedChunks) {
+            return "número de bloques no coincide con el tamaño";
+        }
+
+        return null;
+    }
+
+    /**
+     * Elimina las transferencias que llevan más de TRANSFER_TIMEOUT_MS sin recibir bloques
+     */
+    private void discardStaleTransfers() {
+        long now = System.currentTimeMillis();
+
+        transfers.entrySet().removeIf(entry -> {
+            IncomingFile incoming = entry.getValue();
+
+            if (now - incoming.getLastUpdate() > TRANSFER_TIMEOUT_MS) {
+                Console.show("Transferencia de " + incoming.getFileName() + " incompleta: se descartó");
+                return true;
+            }
+
+            return false;
+        });
+    }
+
+    /**
      * Estado de un archivo que se está reconstruyendo
      */
     private static class IncomingFile {
@@ -95,11 +159,23 @@ public class FileReceiver {
         private final byte[][] chunks;
         private int received;
 
+        /** Momento en que llegó el último bloque (lo leen otros hilos, por eso volatile) */
+        private volatile long lastUpdate;
+
         IncomingFile(String fileName, long fileSize, int totalChunks) {
             this.fileName = fileName;
             this.fileSize = fileSize;
             this.chunks = new byte[totalChunks][];
             this.received = 0;
+            this.lastUpdate = System.currentTimeMillis();
+        }
+
+        long getLastUpdate() {
+            return lastUpdate;
+        }
+
+        String getFileName() {
+            return fileName;
         }
 
         /**
@@ -111,6 +187,8 @@ public class FileReceiver {
             if (index < 0 || index >= chunks.length) {
                 throw new IllegalArgumentException("bloque fuera de rango");
             }
+
+            lastUpdate = System.currentTimeMillis();
 
             //Si un bloque llegara repetido, no se cuenta dos veces
             if (chunks[index] == null) {

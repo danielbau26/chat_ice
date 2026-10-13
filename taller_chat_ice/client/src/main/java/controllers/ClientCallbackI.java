@@ -2,6 +2,7 @@ package controllers;
 
 import com.zeroc.Ice.Current;
 
+import Chat.AudioEndpoint;
 import Chat.ClientCallback;
 import Chat.FileChunk;
 import files.FileReceiver;
@@ -27,9 +28,11 @@ import ui.Console;
 public class ClientCallbackI implements ClientCallback {
 
     private final FileReceiver fileReceiver;
+    private final CallController callController;
 
-    public ClientCallbackI(FileReceiver fileReceiver) {
+    public ClientCallbackI(FileReceiver fileReceiver, CallController callController) {
         this.fileReceiver = fileReceiver;
+        this.callController = callController;
     }
     /**
      * El servidor avisa que alguien te mandó un mensaje privado
@@ -63,6 +66,58 @@ public class ClientCallbackI implements ClientCallback {
         fileReceiver.receive(sender, roomName, chunk);
     }
 
+
+    // ===================== LLAMADAS DE VOZ (RF-05 / RF-06) =====================
+    // Las llamadas 1 a 1 las maneja CallController, que une la señalización (Ice)
+    // con el audio (UDPController).
+
+    /**
+     * Alguien te está llamando
+     */
+    @Override
+    public void incomingCall(String caller, Current current) {
+        callController.onIncomingCall(caller);
+    }
+
+    /**
+     * La persona a la que llamaste aceptó; peer trae su IP y puerto UDP
+     */
+    @Override
+    public void callAccepted(AudioEndpoint peer, Current current) {
+        callController.onCallAccepted(peer);
+    }
+
+    /**
+     * La persona a la que llamaste rechazó
+     */
+    @Override
+    public void callRejected(String callee, Current current) {
+        callController.onCallRejected(callee);
+    }
+
+    /**
+     * La otra persona colgó, canceló o se desconectó
+     */
+    @Override
+    public void callEnded(String peer, Current current) {
+        callController.onCallEnded(peer);
+    }
+
+    /**
+     * Alguien entró a la llamada grupal de una sala
+     */
+    @Override
+    public void groupMemberJoined(String roomName, AudioEndpoint member, Current current) {
+        callController.onGroupMemberJoined(roomName, member);
+    }
+
+    /**
+     * Alguien salió de la llamada grupal de una sala
+     */
+    @Override
+    public void groupMemberLeft(String roomName, String nickname, Current current) {
+        callController.onGroupMemberLeft(roomName, nickname);
+    }
 
     /**
      * El PresenceMonitor del servidor llama esto cada 5 segundos.

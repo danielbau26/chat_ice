@@ -11,6 +11,7 @@ import Chat.ChatError;
 import Chat.ChatServerPrx;
 import Chat.ClientCallbackPrx;
 import Chat.NicknameInUse;
+import controllers.CallController;
 import controllers.ClientCallbackI;
 import ui.Console;
 import files.FileReceiver;
@@ -50,8 +51,7 @@ public class Client {
             // al invocar un metodo sobre el proxy, se serializan los parametros, los envia por red,
             // el servidor ejecuta el metodo real y devuelve el resultado+
 
-            ChatServerPrx chat= ChatServerPrx.checkedCast(communicator.stringToProxy(SERVER_IDENTITY + ":tcp-h"
-            + host +" -p" + port));
+            ChatServerPrx chat= ChatServerPrx.checkedCast(communicator.stringToProxy(SERVER_IDENTITY + ":tcp -h " + host + " -p " + port));
 
             if(chat==null){
                 System.out.println("El objeto '" + SERVER_IDENTITY + "' del servidor no implementa ChatServer");
@@ -64,10 +64,12 @@ public class Client {
             ObjectAdapter adapter= communicator.createObjectAdapter("");
 
             FileReceiver receiver= new FileReceiver();
+            // coordina las llamadas de voz: señalización por Ice + audio por UDP
+            CallController calls = new CallController();
             //registrar el servant en el adapater, en este caso el ClientCallbackI es la implementacion real
             // adapter.add() lo registrara bajo una identidad
             // devuelve el proxy que apunta a el
-            ObjectPrx prx= adapter.add(new ClientCallbackI(receiver), Util.stringToIdentity(UUID.randomUUID().toString()));
+            ObjectPrx prx= adapter.add(new ClientCallbackI(receiver, calls), Util.stringToIdentity(UUID.randomUUID().toString()));
             // activar el adapter para que despache invocaciones
             adapter.activate();
             //asociar el adapter a la conexion con el servidor (bidireccional).
@@ -84,11 +86,18 @@ public class Client {
                 return;
             }
             receiver.setOwner(nickname);
-            System.out.println("Bienvenido, " + nickname + ". Escribe /help para ver los comandos.");
-            Console.prompt();
+            calls.init(chat, nickname);
+            //Console.show en vez de System.out: justo después del login el servidor manda
+            //presenceChanged desde otro hilo y así las líneas no se mezclan
+            Console.show("Bienvenido, " + nickname + ". Escribe /help para ver los comandos.");
 
             // ciclo de comandos
-            commandLoop(scanner, chat,nickname);
+            try {
+                commandLoop(scanner, chat, nickname, calls);
+            } finally {
+                // al salir (logout o conexión perdida) se libera el micrófono, parlantes y socket UDP
+                calls.shutdown();
+            }
         }catch (LocalException e){
             System.out.println("No se pudo conectar con el servidor en " + host + ":" + port
                     + " (" + e.getClass().getSimpleName() + ")");
@@ -113,7 +122,7 @@ public class Client {
                 chat.login(nickname,callback);
                 return nickname;
             }catch (NicknameInUse e){
-                System.out.println("el nickname: " + nickname + "esta en uso");
+                System.out.println("el nickname: " + nickname + " está en uso");
             }catch (ChatError e){
                 System.out.println("Error: " + e.reason);
             }
@@ -134,7 +143,7 @@ public class Client {
      * @param chat - proxy del servidor
      * @param nickname - nickname con el que se inciio la sesion
      */
-    private static void commandLoop(Scanner scanner, ChatServerPrx chat, String nickname) {
+    private static void commandLoop(Scanner scanner, ChatServerPrx chat, String nickname, CallController calls) {
 
         while (scanner.hasNextLine()) {
 
@@ -202,6 +211,8 @@ public class Client {
                         }
                         chat.leaveRoom(nickname, parts[1]);
                         Console.show("[OK] Saliste de #" + parts[1]);
+                        //si estabas en la llamada grupal de esa sala, el servidor ya te sacó
+                        calls.onLeftRoom(parts[1]);
                         break;
 
                     //Catálogo de salas disponibles
@@ -228,6 +239,54 @@ public class Client {
                         }
                         FileSender.sendAsync(chat, nickname, parts[1], parts[2]);
                         break;
+                    /*
+                     * Llamadas de voz 1 a 1 (RF-05). La señalización va por Ice y el audio
+                     * por UDP directo entre los dos clientes (ver CallController).
+                     */
+                    case "/call":
+                        if (parts.length < 2) {
+                            Console.show("Uso: /call <usuario>");
+                            break;
+                        }
+                        calls.call(parts[1]);
+                        break;
+
+                    case "/accept":
+                        calls.accept(parts.length < 2 ? null : parts[1]);
+                        break;
+
+                    case "/reject":
+                        calls.reject(parts.length < 2 ? null : parts[1]);
+                        break;
+
+                    case "/hangup":
+                        calls.hangup();
+                        break;
+
+                    /*
+                     * Llamada grupal de una sala (RF-06), malla P2P: cada participante
+                     * envía su audio directamente a todos los demás.
+                     */
+                    case "/groupcall":
+                        if (parts.length < 2) {
+                            Console.show("Uso: /groupcall <sala>");
+                            break;
+                        }
+                        calls.joinGroupCall(parts[1]);
+                        break;
+
+                    case "/leavecall":
+                        calls.leaveGroupCall();
+                        break;
+
+                    case "/mute":
+                        calls.setMuted(true);
+                        break;
+
+                    case "/unmute":
+                        calls.setMuted(false);
+                        break;
+
                     case "/help":
                         showHelp();
                         break;
@@ -240,7 +299,7 @@ public class Client {
                      */
                     case "/logout":
                         chat.logout(nickname);
-                        System.out.println("\rSesión cerrada. ¡Hasta luego!");
+                        Console.showFinal("Sesión cerrada. ¡Hasta luego!");
                         return;
 
                     default:
@@ -260,7 +319,7 @@ public class Client {
                  * Error de comunicación: el servidor se cayó o la conexión se perdió.
                  * No tiene sentido seguir leyendo comandos.
                  */
-                System.out.println("\rSe perdió la conexión con el servidor.");
+                Console.showFinal("Se perdió la conexión con el servidor.");
                 return;
             }
         }
@@ -281,6 +340,13 @@ public class Client {
                 "  /sendfile #<sala> <ruta>     enviar archivo a una sala",
                 "  /rooms                   ver salas",
                 "  /users                   ver conectados",
+                "  /call <usuario>          llamar (voz)",
+                "  /accept [usuario]        aceptar llamada",
+                "  /reject [usuario]        rechazar llamada",
+                "  /hangup                  colgar / cancelar llamada",
+                "  /groupcall <sala>        entrar a la llamada grupal de una sala",
+                "  /leavecall               salir de la llamada grupal",
+                "  /mute, /unmute           silenciar / activar micrófono",
                 "  /logout                  cerrar sesión y salir"
         ));
     }
