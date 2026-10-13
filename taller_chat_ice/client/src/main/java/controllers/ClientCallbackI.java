@@ -28,9 +28,11 @@ import ui.Console;
 public class ClientCallbackI implements ClientCallback {
 
     private final FileReceiver fileReceiver;
+    private final CallController callController;
 
-    public ClientCallbackI(FileReceiver fileReceiver) {
+    public ClientCallbackI(FileReceiver fileReceiver, CallController callController) {
         this.fileReceiver = fileReceiver;
+        this.callController = callController;
     }
     /**
      * El servidor avisa que alguien te mandó un mensaje privado
@@ -66,15 +68,15 @@ public class ClientCallbackI implements ClientCallback {
 
 
     // ===================== LLAMADAS DE VOZ (RF-05 / RF-06) =====================
-    // Por ahora solo muestran el aviso. El manejo del audio UDP se conecta en los
-    // siguientes pasos (UDPController).
+    // Las llamadas 1 a 1 las maneja CallController, que une la señalización (Ice)
+    // con el audio (UDPController).
 
     /**
      * Alguien te está llamando
      */
     @Override
     public void incomingCall(String caller, Current current) {
-        Console.show("[Llamada] " + caller + " te está llamando. Usa /accept " + caller + " o /reject " + caller);
+        callController.onIncomingCall(caller);
     }
 
     /**
@@ -82,7 +84,7 @@ public class ClientCallbackI implements ClientCallback {
      */
     @Override
     public void callAccepted(AudioEndpoint peer, Current current) {
-        Console.show("[Llamada] " + peer.nickname + " aceptó la llamada");
+        callController.onCallAccepted(peer);
     }
 
     /**
@@ -90,7 +92,7 @@ public class ClientCallbackI implements ClientCallback {
      */
     @Override
     public void callRejected(String callee, Current current) {
-        Console.show("[Llamada] " + callee + " rechazó la llamada");
+        callController.onCallRejected(callee);
     }
 
     /**
@@ -98,7 +100,7 @@ public class ClientCallbackI implements ClientCallback {
      */
     @Override
     public void callEnded(String peer, Current current) {
-        Console.show("[Llamada] La llamada con " + peer + " terminó");
+        callController.onCallEnded(peer);
     }
 
     /**
