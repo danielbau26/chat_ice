@@ -108,7 +108,7 @@ public class ClientCallbackI implements ClientCallback {
      */
     @Override
     public void groupMemberJoined(String roomName, AudioEndpoint member, Current current) {
-        Console.show("[Llamada #" + roomName + "] " + member.nickname + " entró a la llamada");
+        callController.onGroupMemberJoined(roomName, member);
     }
 
     /**
@@ -116,7 +116,7 @@ public class ClientCallbackI implements ClientCallback {
      */
     @Override
     public void groupMemberLeft(String roomName, String nickname, Current current) {
-        Console.show("[Llamada #" + roomName + "] " + nickname + " salió de la llamada");
+        callController.onGroupMemberLeft(roomName, nickname);
     }
 
     /**

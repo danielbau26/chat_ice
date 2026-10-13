@@ -211,6 +211,8 @@ public class Client {
                         }
                         chat.leaveRoom(nickname, parts[1]);
                         Console.show("[OK] Saliste de #" + parts[1]);
+                        //si estabas en la llamada grupal de esa sala, el servidor ya te sacó
+                        calls.onLeftRoom(parts[1]);
                         break;
 
                     //Catálogo de salas disponibles
@@ -259,6 +261,22 @@ public class Client {
 
                     case "/hangup":
                         calls.hangup();
+                        break;
+
+                    /*
+                     * Llamada grupal de una sala (RF-06), malla P2P: cada participante
+                     * envía su audio directamente a todos los demás.
+                     */
+                    case "/groupcall":
+                        if (parts.length < 2) {
+                            Console.show("Uso: /groupcall <sala>");
+                            break;
+                        }
+                        calls.joinGroupCall(parts[1]);
+                        break;
+
+                    case "/leavecall":
+                        calls.leaveGroupCall();
                         break;
 
                     case "/mute":
@@ -326,6 +344,8 @@ public class Client {
                 "  /accept [usuario]        aceptar llamada",
                 "  /reject [usuario]        rechazar llamada",
                 "  /hangup                  colgar / cancelar llamada",
+                "  /groupcall <sala>        entrar a la llamada grupal de una sala",
+                "  /leavecall               salir de la llamada grupal",
                 "  /mute, /unmute           silenciar / activar micrófono",
                 "  /logout                  cerrar sesión y salir"
         ));
