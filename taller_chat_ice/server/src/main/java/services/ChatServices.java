@@ -19,9 +19,34 @@ public class ChatServices {
     private final UserDao userDao;
     private final RoomDao roomDao;
 
+    /**
+     * Servicio de llamadas. Se usa para colgar las llamadas de un usuario cuando hace
+     * logout, se desconecta o sale de una sala. Se asigna con setCallServices porque
+     * CallServices también necesita a ChatServices (dependencia en ambos sentidos).
+     * volatile: lo asigna el hilo principal y lo leen los hilos de Ice.
+     */
+    private volatile CallServices callServices;
+
     public ChatServices() {
         this.userDao = new UserDao();
         this.roomDao = new RoomDao();
+    }
+
+    public void setCallServices(CallServices callServices) {
+        this.callServices = callServices;
+    }
+
+    /**
+     * Termina las llamadas de un usuario que ya no está disponible.
+     * Se llama SIEMPRE fuera del synchronized(this): CallServices consulta a ChatServices,
+     * así ningún hilo tiene los dos candados al tiempo (evita deadlocks).
+     */
+    private void endCallsOf(String nickname) {
+        CallServices calls = callServices;
+
+        if (calls != null) {
+            calls.onUserDisconnected(nickname);
+        }
     }
 
     public User login(String nickname, ClientCallbackPrx callback) throws Exception {
@@ -53,6 +78,9 @@ public class ChatServices {
             userDao.delete(nickname);
         }
 
+        //Cuelga sus llamadas (fuera del candado)
+        endCallsOf(nickname);
+
         notifyPresence();
     }
 
@@ -82,16 +110,26 @@ public class ChatServices {
         room.addMember(nickname);
     }
 
-    public synchronized void leaveRoom(String nickname, String roomName) throws Exception {
-        requireUser(nickname);
+    public void leaveRoom(String nickname, String roomName) throws Exception {
+        synchronized (this) {
+            requireUser(nickname);
 
-        Room room = requireRoom(roomName);
+            Room room = requireRoom(roomName);
 
-        if (!room.hasMember(nickname)) {
-            throw new IllegalStateException("El usuario no pertenece a esta sala");
+            if (!room.hasMember(nickname)) {
+                throw new IllegalStateException("El usuario no pertenece a esta sala");
+            }
+
+            room.removeMember(nickname);
+            roomName = room.getName();
         }
 
-        room.removeMember(nickname);
+        //Si estaba en la llamada grupal de la sala, sale de ella (fuera del candado)
+        CallServices calls = callServices;
+
+        if (calls != null) {
+            calls.onUserLeftRoom(nickname, roomName);
+        }
     }
 
     /**
@@ -404,6 +442,9 @@ public class ChatServices {
 
             userDao.delete(nickname);
         }
+
+        //Cuelga sus llamadas (fuera del candado)
+        endCallsOf(disconnectedUser.getNickname());
 
         notifyPresence();
     }

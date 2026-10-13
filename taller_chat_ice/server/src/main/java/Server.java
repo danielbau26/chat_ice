@@ -3,6 +3,7 @@ import com.zeroc.Ice.ObjectAdapter;
 import com.zeroc.Ice.Util;
 
 import controllers.IceController;
+import services.CallServices;
 import services.ChatServices;
 import services.PresenceMonitor;
 import com.zeroc.Ice.InitializationData;
@@ -22,8 +23,13 @@ public class Server {
             //crea el servicio
             ChatServices chatServices = new ChatServices();
 
+            //crea el servicio de llamadas (señalización de voz). Se conocen mutuamente:
+            //CallServices consulta usuarios/salas y ChatServices le avisa logout y caídas
+            CallServices callServices = new CallServices(chatServices);
+            chatServices.setCallServices(callServices);
+
             //crea el controllador
-            IceController controller = new IceController(chatServices);
+            IceController controller = new IceController(chatServices, callServices);
 
             //recibe las llamadas de ice y lo vuelve el objeto que corresponda
             ObjectAdapter adapter = communicator.createObjectAdapterWithEndpoints("ChatAdapter", "tcp -h 0.0.0.0 -p 10000");
